@@ -184,6 +184,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private TextView greeting;
     private View clockBlock;
     private View btnInputs;
+    private TextView topIconLabel;
     /** config show_inputs_pill: false keeps the Inputs pill hidden even when the TV has inputs. */
     private boolean showInputsPill = true;
     private TextView btnWifi;
@@ -817,6 +818,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
 
         btnInputs = findViewById(R.id.btnInputs);
+        topIconLabel = findViewById(R.id.topIconLabel);
         View btnSettings = findViewById(R.id.btnSettings);
         btnInputs.setOnClickListener(v -> showInputs());
         btnWifi.setOnClickListener(v -> openNetworkPill());
@@ -918,21 +920,31 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnReorder.setOnKeyListener(pillKeys);
         btnLibraryTop.setOnKeyListener(pillKeys);
         for (View button : topAppButtons) button.setOnKeyListener(pillKeys);
-        if (advancedEffects) {
-            List<View> pills = new ArrayList<>(Arrays.asList(btnInputs, btnWifi, btnVpn, btnReorder, btnLibraryTop, btnSettings));
-            pills.addAll(topAppButtons);
-            for (View button : pills) {
-                button.setOnFocusChangeListener((view, focused) -> view.animate()
-                        .scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f)
-                        .setDuration(reducedMotion ? Motion.REDUCED_MS : 160).start());
-            }
+        List<View> pills = new ArrayList<>(Arrays.asList(btnInputs, btnWifi, btnVpn, btnReorder, btnLibraryTop, btnSettings));
+        pills.addAll(topAppButtons);
+        for (View button : pills) {
+            button.setOnFocusChangeListener((view, focused) -> {
+                if (advancedEffects) {
+                    view.animate()
+                            .scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f)
+                            .setDuration(reducedMotion ? Motion.REDUCED_MS : 160).start();
+                }
+                if (focused) {
+                    showTopIconLabel(view);
+                    hideHero();
+                } else {
+                    hideTopIconLabel();
+                }
+            });
         }
         if (festive) applyFestiveSkin((TextView) btnInputs, (TextView) btnSettings);
 
-        // Hide the glass when focus leaves the tiles.
+        // Hide the glass when focus leaves the tiles; hide top label when focus leaves top buttons.
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
             boolean onTile = newF != null && newF.getId() == R.id.card;
             if (!onTile) hideGlass();
+            boolean onTopBar = newF != null && newF.getParent() == findViewById(R.id.topButtons);
+            if (!onTopBar) hideTopIconLabel();
         });
 
         packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -3051,6 +3063,49 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         pill.setPaddingRelative(pad, 0, pad, 0);
         pill.setCompoundDrawablePadding(0);
         pill.getLayoutParams().width = Math.round(42 * density);
+    }
+
+    private void showTopIconLabel(View view) {
+        if (topIconLabel == null) return;
+        CharSequence desc = view.getContentDescription();
+        if (desc == null || desc.length() == 0) {
+            if (view instanceof TextView) desc = ((TextView) view).getText();
+        }
+        if (desc == null || desc.length() == 0) {
+            hideTopIconLabel();
+            return;
+        }
+        topIconLabel.setText(desc);
+        topIconLabel.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int labelW = topIconLabel.getMeasuredWidth();
+        int labelH = topIconLabel.getMeasuredHeight();
+
+        View parent = (View) view.getParent();
+        if (parent == null) return;
+        float btnW = view.getWidth() > 0 ? view.getWidth() : (42f * density);
+        float centerX = parent.getX() + view.getX() + btnW / 2f;
+        float targetX = centerX - labelW / 2f;
+        float targetY = parent.getY() + view.getY() - labelH - (6f * density);
+
+        View grandParent = (View) parent.getParent();
+        if (grandParent != null) {
+            float maxX = grandParent.getWidth() - labelW - (12f * density);
+            if (targetX > maxX && maxX > 0) targetX = maxX;
+        }
+        if (targetX < 0) targetX = 0;
+
+        topIconLabel.setX(targetX);
+        topIconLabel.setY(targetY);
+        topIconLabel.setVisibility(View.VISIBLE);
+        topIconLabel.animate().cancel();
+        topIconLabel.setAlpha(1f);
+    }
+
+    private void hideTopIconLabel() {
+        if (topIconLabel == null) return;
+        topIconLabel.animate().cancel();
+        topIconLabel.setVisibility(View.GONE);
     }
 
     // ---- festive skin ------------------------------------------------------------------------------
